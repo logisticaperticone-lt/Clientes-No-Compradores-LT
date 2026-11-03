@@ -177,11 +177,11 @@ ol.steps li{margin:5px 0}
    Si dejás "PEGAR_ACA", la app funciona en modo demo (datos solo en este navegador).
    ============================================================ */
 const FIREBASE_CONFIG = {
-  apiKey: "PEGAR_ACA",
-  authDomain: "PEGAR_ACA",
-  databaseURL: "PEGAR_ACA",
-  projectId: "PEGAR_ACA",
-  appId: "PEGAR_ACA"
+  apiKey: "AIzaSyDt70oblKz9Uyc-0J07q3u8ipcfu4G9YhY",
+  authDomain: "cnc-logistica-total.firebaseapp.com",
+  databaseURL: "https://cnc-logistica-total-default-rtdb.firebaseio.com",
+  projectId: "cnc-logistica-total",
+  appId: "1:544803137494:web:2c880d2af63fe9fe902677"
 };
 </script>
 <script id="main">
@@ -378,10 +378,11 @@ function buildDataset(clientes, venta, cfg){
 function chunkClientes(recs,size){ const o={}; for(let i=0;i<recs.length;i+=size) o['c'+(i/size)]=JSON.stringify(recs.slice(i,i+size)); return o; }
 
 /* ---------------- Historial (para la evolución mensual del %CNC) ---------------- */
+const hkey = v => String(v||'(SIN VENDEDOR)').replace(/[.$#\[\]\/]/g,' ');
 function histFrom(items){ // items: {vd, neg, ms, nv}
   const H={};
   for(const it of items){
-    const v=it.vd||'(SIN VENDEDOR)'; const o=H[v]||(H[v]={}); const a=o[it.neg]||(o[it.neg]=new Array(14).fill(0));
+    const v=hkey(it.vd); const o=H[v]||(H[v]={}); const a=o[it.neg]||(o[it.neg]=new Array(14).fill(0));
     const k=HORS.indexOf(horOf(it.ms));
     a[0]++; a[1+k]++; if(!it.nv){ a[7]++; a[8+k]++; }
   }
@@ -875,7 +876,7 @@ function viewRs(){
 function evolucionHTML(){
   const u=S.ui.rs; const ex=u.nv==='excluir'; const neg=u.evNeg||S.meta.negocios[0];
   const months=[...new Set([...Object.keys(S.hist),S.meta.corte])].sort();
-  const vendScope=new Map(); S.clientes.forEach(c=>{ if(inScope(c)) vendScope.set(c.vd||'(SIN VENDEDOR)',c.sup); });
+  const vendScope=new Map(); S.clientes.forEach(c=>{ if(inScope(c)) vendScope.set(hkey(c.vd),c.sup); });
   const live=histFromDataset(S.clientes.filter(inScope),S.meta.negocios);
   const val=(m,v)=>{ const src=(m===S.meta.corte)?live[v]:(S.hist[m]||{})[v]; const a=src&&src[neg]; if(!a) return null; const o=ex?7:0; const cart=a[o]; if(!cart) return null; const cnc=a[o+2]+a[o+3]+a[o+4]+a[o+5]+a[o+6]; return cnc/cart; };
   const vendors=[...vendScope.keys()].sort((a,b)=>a.localeCompare(b));
