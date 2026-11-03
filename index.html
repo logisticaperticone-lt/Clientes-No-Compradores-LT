@@ -618,8 +618,8 @@ function viewInfo(){
    '<p class="small muted">Un tilde verde en la columna Respuesta indica que la fila ya tiene motivo.</p></div></div>'+
   '<div class="grid2"><div class="card"><h2>Cómo se calcula el horizonte</h2><p>Se cuentan los meses entre el <b>mes de corte ('+esc(corte)+')</b> y la última compra del cliente en ese negocio:</p><ul class="clean">'+HORS.map(h=>'<li><b>'+esc(HOR_SHORT[h])+'</b>: '+esc(HOR_DESC[h])+'</li>').join('')+'</ul>'+
    '<p>Si el cliente no tiene compras en el período con datos, se cuenta desde su <b>fecha de alta</b>. Así un alta nueva no se confunde con un cliente que hace más de un año que no compra: aparece con la marca <span class="chip info">Alta reciente</span>.</p></div>'+
-  '<div class="card"><h2>Marcas en cada cliente</h2><ul class="clean"><li><span class="chip warn">Nunca compró</span> el cliente no registra compras de ese negocio en el período con datos ('+esc(S.meta?ymLabel(S.meta.desde):'')+' en adelante). En GENERAL se pueden ocultar o ver solos.</li>'+
-   '<li><span class="chip warn">Sin compras en ningún negocio</span> no compró nada en ningún negocio: el candidato más claro a baja.</li>'+
+  '<div class="card"><h2>Marcas en cada cliente</h2><ul class="clean"><li><span class="chip warn">Nunca compró</span> el cliente no registra compras de ese negocio en el período con datos ('+esc(S.meta?ymLabel(S.meta.desde):'')+' en adelante) pero sí compra otros negocios. En GENERAL se pueden ocultar o ver solos.</li>'+
+   '<li><span class="chip warn">Sin compras en ningún negocio</span> no compró nada en ningún negocio desde el inicio de los datos. Aparece siempre en GENERAL (nunca se oculta) y es el candidato más claro a baja.</li>'+
    '<li><span class="chip info">Alta reciente</span> el cliente se dio de alta en los últimos 3 meses y todavía no compró.</li></ul>'+
    '<p>"MATCH" junta VINO y ADYACENCIAS: cuenta la compra más reciente de cualquiera de los dos.</p></div></div>'+
   '<div class="card"><h2>Paso a paso</h2><ol class="steps"><li>Entrá con tu nombre de supervisor.</li><li>En <b>OBLIGATORIO</b> completá motivo y plan hasta que no queden filas rojas ni naranjas. Podés filtrar por vendedor, ruta y negocio.</li><li>En <b>GENERAL</b> revisá los clientes que hace más de 6 meses no compran y cargá motivo y plan en los que corresponda (por ejemplo, DAR DE BAJA).</li><li>En <b>RESUMEN</b> mirá cómo está cada vendedor, ruta y día de visita.</li></ol></div>';
@@ -641,7 +641,7 @@ function pagerHTML(total,st){
 }
 function chipsFor(r){
   let h=''; const c=r.c;
-  if(r.nv) h+='<span class="chip warn" title="No registra compras de este negocio desde '+esc(ymLabel(S.meta.desde))+'">Nunca compró</span>';
+  if(r.nv&&!c.sinCompras) h+='<span class="chip warn" title="No registra compras de este negocio desde '+esc(ymLabel(S.meta.desde))+', pero sí de otros negocios">Nunca compró</span>';
   if(r.nv&&c.altaReciente) h+='<span class="chip info" title="Alta: '+esc(c.a)+'">Alta reciente</span>';
   if(c.sinCompras) h+='<span class="chip warn" title="Sin compras en ningún negocio">Sin compras en ningún negocio</span>';
   const f=S.beesFoto[c.i]; if(f) h+=(f.img?'<a class="chip info" href="'+esc(f.img)+'" target="_blank" rel="noopener">Foto BEES</a>':'<span class="chip info">Tarea foto BEES</span>');
@@ -765,7 +765,7 @@ function geFiltered(){
   if(u.vend!=='') rows=rows.filter(r=>String(r.c.vc)===String(u.vend));
   if(u.ruta) rows=rows.filter(r=>r.c.rd===u.ruta);
   if(u.neg) rows=rows.filter(r=>r.neg===u.neg);
-  if(u.nv==='ocultar') rows=rows.filter(r=>!r.nv); else if(u.nv==='solo') rows=rows.filter(r=>r.nv);
+  if(u.nv==='ocultar') rows=rows.filter(r=>!(r.nv&&!r.c.sinCompras)); else if(u.nv==='solo') rows=rows.filter(r=>r.nv&&!r.c.sinCompras);
   if(u.resp==='pend') rows=rows.filter(r=>!(S.resp[r.key]&&S.resp[r.key].m)); else if(u.resp==='ok') rows=rows.filter(r=>S.resp[r.key]&&S.resp[r.key].m);
   if(u.q) rows=rows.filter(r=>searchMatch(r,u.q));
   rows.sort((a,b)=>{ if(u.sort==='ms'){ const d=b.ms-a.ms; if(d) return d; } if(u.sort==='cli'){ return a.c.i-b.c.i||a.neg.localeCompare(b.neg); }
