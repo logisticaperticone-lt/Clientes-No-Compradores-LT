@@ -164,6 +164,8 @@ ol.steps li{margin:5px 0}
   .bees{max-width:none}
 }
 @media (prefers-reduced-motion:no-preference){.toast{animation:tin .18s ease-out}@keyframes tin{from{transform:translateY(8px);opacity:0}}}
+.xv-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:4px 16px;margin-top:8px;max-height:320px;overflow:auto}
+.xv{padding:3px 0;display:flex;align-items:center;gap:8px;height:auto}
 </style>
 </head>
 <body>
@@ -450,11 +452,11 @@ function antFromResp(resp){ const a={}; for(const k in (resp||{})){ const r=resp
 /* ---------------- Estado ---------------- */
 const S = {
   db:null, mode:'', user:null, tab:'info', mes:null, meta:null, clientes:[], rows:[], cliById:{}, baseRaw:null,
-  resp:{}, ant:{}, bees:{}, beesGen:{}, beesFoto:{}, hist:{}, meses:[], cfg:clone(DEFAULT_CFG), cfgRaw:{}, supMap:{},
+  resp:{}, ant:{}, bees:{}, beesGen:{}, beesFoto:{}, hist:{}, clientesAll:[], rowsGen:[], meses:[], cfg:clone(DEFAULT_CFG), cfgRaw:{}, supMap:{},
   readonly:false, viewAs:'*', unsubs:[], pending:null,
   ui:{
     ob:{vend:'',ruta:'',neg:'',est:'',q:'',page:0,ps:50,sort:'ruta'},
-    ge:{vend:'',ruta:'',neg:'',hors:['CNC U6M','CNC U9M','CNC U12M','CNC'],nv:'ocultar',resp:'',q:'',page:0,ps:50,sort:'ms'},
+    ge:{vend:'',ruta:'',neg:'GENERAL',hors:['CNC U6M','CNC U9M','CNC U12M','CNC'],nv:'ocultar',resp:'',q:'',page:0,ps:50,sort:'ms'},
     rs:{by:'vend',neg:'*',mode:'abs',nv:'incluir',evNeg:'CZA'}
   }
 };
@@ -472,6 +474,7 @@ function applyCfg(raw){
   const c=clone(DEFAULT_CFG); raw=raw||{};
   if(raw.lists){ if(raw.lists.motivos) c.motivos=raw.lists.motivos.split('\n').map(x=>x.trim()).filter(Boolean); if(raw.lists.planes) c.planes=raw.lists.planes.split('\n').map(x=>x.trim()).filter(Boolean); }
   if(raw.mapeo) c.mapeo=raw.mapeo;
+  c.excluidos=[]; if(raw.excluidos){ try{ c.excluidos=JSON.parse(raw.excluidos).map(String); }catch(e){} }
   if(raw.supervisores){ try{ c.supervisores=JSON.parse(raw.supervisores); }catch(e){} }
   S.cfg=c; S.cfgRaw=raw; S.supMap={};
   for(const [s,l] of Object.entries(c.supervisores)) for(const v of l) S.supMap[v]=s;
@@ -479,12 +482,20 @@ function applyCfg(raw){
 }
 
 function buildRows(){
-  S.rows=[]; S.cliById={}; const negs=S.meta.negocios, corte=S.meta.corte;
+  S.rows=[]; S.rowsGen=[]; S.cliById={}; const negs=S.meta.negocios, corte=S.meta.corte;
+  const ex=new Set((S.cfg.excluidos||[]).map(String));
+  S.clientes=S.clientesAll.filter(c=>!ex.has(String(c.vc)));
   for(const c of S.clientes){
     S.cliById[c.i]=c; c.sup=supOf(c.vc);
     c.sinCompras=c.n.every(x=>x[1]===1);
     c.altaReciente = !!c.a && ymDiff(corte,c.a.slice(0,7))<=3;
     c.n.forEach((x,k)=>{ S.rows.push({key:c.i+'_'+negs[k], c, neg:negs[k], k, ms:x[0], nv:x[1], u:x[2], hor:horOf(x[0])}); });
+    // Fila GENERAL: el cliente como comprador de cualquier negocio (la compra más reciente de todos)
+    const bought=c.n.map((x,k)=>({x,k})).filter(o=>!o.x[1]);
+    let g;
+    if(bought.length){ const best=bought.reduce((a,o)=>o.x[0]<a.x[0]?o:a); g={ms:best.x[0],nv:0,u:best.x[2],ln:negs[best.k]}; }
+    else { g={ms:Math.min(...c.n.map(x=>x[0])),nv:1,u:'',ln:''}; }
+    S.rowsGen.push({key:c.i+'_GENERAL', c, neg:'GENERAL', k:-1, ms:g.ms, nv:g.nv, u:g.u, ln:g.ln, hor:horOf(g.ms)});
   }
 }
 
@@ -492,13 +503,13 @@ async function loadConfig(){ applyCfg(await S.db.get('cnc/config')); S.hist = (a
 
 async function loadMonth(mes){
   S.unsubs.forEach(f=>{try{f()}catch(e){}}); S.unsubs=[];
-  S.mes=mes; S.meta=null; S.clientes=[]; S.rows=[]; S.resp={}; S.ant={}; S.bees={}; S.beesGen={}; S.beesFoto={}; S.baseRaw=null;
+  S.mes=mes; S.meta=null; S.clientes=[]; S.rows=[]; S.resp={}; S.ant={}; S.bees={}; S.beesGen={}; S.beesFoto={}; S.baseRaw=null; S.clientesAll=[]; S.rowsGen=[];
   if(!mes) return;
   const b='cnc/meses/'+mes;
   const [meta,base,bees,beesGen,beesFoto,ant]=await Promise.all([S.db.get(b+'/meta'),S.db.get(b+'/base'),S.db.get(b+'/bees'),S.db.get(b+'/beesGen'),S.db.get(b+'/beesFoto'),S.db.get(b+'/ant')]);
   if(!meta||!base) return;
   S.meta=meta; S.baseRaw=base;
-  S.clientes=Object.keys(base).sort((a,c)=>+a.slice(1)-+c.slice(1)).flatMap(k=>JSON.parse(base[k]));
+  S.clientesAll=Object.keys(base).sort((a,c)=>+a.slice(1)-+c.slice(1)).flatMap(k=>JSON.parse(base[k]));
   S.bees=bees||{}; S.beesGen=beesGen||{}; S.beesFoto=beesFoto||{}; S.ant=ant||{};
   buildRows();
   S.readonly = S.mode==='snapshot' || mes!==S.cfgRaw.mesActivo;
@@ -603,7 +614,7 @@ function viewInfo(){
    '<p><b>Nivel 0</b> (0%): no hay seguimiento por horizonte y negocio. <b>Nivel 1</b> (100%): hay seguimiento por horizonte y negocio, los CNC U3M de CZA y NABs tienen motivo y plan asociado, y se cumple la frecuencia de los U12M.</p></div>'+
   '<div class="card"><h2>Qué hay que completar</h2><ul class="clean">'+
    '<li><b>OBLIGATORIO</b>: motivo de no compra y plan de acción de <u>todos</u> los CNC U3M de CZA y NABs. Es lo que se audita; lo completa cada supervisor con su equipo durante el mes.</li>'+
-   '<li><b>GENERAL</b>: revisión de los CNC de más de 6 meses de todos los negocios. Sirve para decidir qué clientes dar de baja o recuperar. Acá van las respuestas de OBLIGATORIO para el mismo cliente, así no se pierde el contexto.</li>'+
+   '<li><b>GENERAL</b>: revisión de los CNC de más de 6 meses de todos los negocios. Sirve para decidir qué clientes dar de baja o recuperar. Por defecto mira <b>GENERAL (cualquier negocio)</b>: una fila por cliente, con la compra más reciente de cualquiera de los negocios, así ves directo si compra o no. También podés elegir un negocio puntual. Acá van las respuestas de OBLIGATORIO para el mismo cliente, así no se pierde el contexto.</li>'+
    '<li><b>RESUMEN</b>: cuántos CNC tiene cada vendedor, ruta y día de visita, en cantidades y en porcentaje.</li></ul>'+
    '<p>Cada cambio se guarda solo y lo ven todos al instante. El motivo BEES Force es una referencia: el que cuenta es el que elegís vos.</p></div></div>'+
   '<div class="grid2"><div class="card"><h2>Colores en OBLIGATORIO</h2><p class="muted">Cuánto falta completar en cada fila.</p><div class="legend">'+
@@ -663,7 +674,7 @@ function rutaCell(c){ return esc((c.vd||'(sin vendedor)'))+'<div class="muted sm
 function negCell(r,showHor){
   let h='<span class="chip neg">'+esc(r.neg)+'</span>';
   if(showHor) h+=' <span class="chip h-'+HOR_COLOR[r.hor]+'">'+esc(HOR_SHORT[r.hor])+'</span>';
-  h+='<div class="muted small">'+(r.nv?'Sin compras · alta '+esc(r.c.a?ymLabel(r.c.a.slice(0,7)):'s/d'):'Últ. compra '+esc(ymLabel(r.u)))+' · '+r.ms+' m</div>';
+  h+='<div class="muted small">'+(r.nv?'Sin compras · alta '+esc(r.c.a?ymLabel(r.c.a.slice(0,7)):'s/d'):'Últ. compra '+esc(ymLabel(r.u))+(r.neg==='GENERAL'&&r.ln?' en '+esc(r.ln):''))+' · '+r.ms+' m</div>';
   return h;
 }
 function inputsCells(r){
@@ -761,10 +772,10 @@ function bindPager(root,st,fn){
 /* ---------------- GENERAL ---------------- */
 function geFiltered(){
   const u=S.ui.ge;
-  let rows=S.rows.filter(r=>inScope(r.c) && u.hors.includes(r.hor));
+  let rows=(u.neg==='GENERAL'?S.rowsGen:S.rows).filter(r=>inScope(r.c) && u.hors.includes(r.hor));
   if(u.vend!=='') rows=rows.filter(r=>String(r.c.vc)===String(u.vend));
   if(u.ruta) rows=rows.filter(r=>r.c.rd===u.ruta);
-  if(u.neg) rows=rows.filter(r=>r.neg===u.neg);
+  if(u.neg&&u.neg!=='GENERAL') rows=rows.filter(r=>r.neg===u.neg);
   if(u.nv==='ocultar') rows=rows.filter(r=>!(r.nv&&!r.c.sinCompras)); else if(u.nv==='solo') rows=rows.filter(r=>r.nv&&!r.c.sinCompras);
   if(u.resp==='pend') rows=rows.filter(r=>!(S.resp[r.key]&&S.resp[r.key].m)); else if(u.resp==='ok') rows=rows.filter(r=>S.resp[r.key]&&S.resp[r.key].m);
   if(u.q) rows=rows.filter(r=>searchMatch(r,u.q));
@@ -776,7 +787,7 @@ function viewGe(){
   const u=S.ui.ge; const vs=vendOpts(); if(u.vend!==''&&!vs.some(v=>String(v[0])===String(u.vend))) u.vend='';
   $('#view').innerHTML='<div class="toolbar">'+scopeBar()+
    selHTML('g-vend','Vendedor',[['','Todos'],...vs],u.vend)+selHTML('g-ruta','Ruta',[['','Todas'],...rutaOpts(u.vend).map(x=>[x,x])],u.ruta)+
-   selHTML('g-neg','Negocio',[['','Todos'],...S.meta.negocios.map(n=>[n,n])],u.neg)+
+   selHTML('g-neg','Negocio',[['GENERAL','GENERAL (cualquier negocio)'],['','Todos, por separado'],...S.meta.negocios.map(n=>[n,n])],u.neg)+
    selHTML('g-nv','Nunca compró ese negocio',[['ocultar','Ocultar'],['mostrar','Mostrar junto con el resto'],['solo','Ver solo esos']],u.nv)+
    selHTML('g-resp','Respuesta',[['','Todas'],['pend','Pendientes'],['ok','Con motivo']],u.resp)+
    selHTML('g-sort','Ordenar por',[['ms','Más meses sin comprar'],['ruta','Vendedor y ruta'],['cli','Cliente']],u.sort)+
@@ -914,11 +925,20 @@ function viewAdmin(){
   '<div style="margin-top:10px;display:flex;gap:10px"><button class="btn" id="a-proc">Procesar y revisar</button><button class="btn" id="a-pub" disabled>Publicar mes</button></div><div id="ad-prev"></div><div class="log hide" id="ad-log"></div></div>'+
   '<div class="card"><h2>Actualizar solo BEES Force</h2><p class="muted">Para sumar las respuestas de BEES del mes cuando llegan después. Reconoce solo los 3 tipos de archivo (U90 sin compra, U90 por negocio y U12M) y toma únicamente los clientes de tu distribuidor ('+DIST_CODE+').</p><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><label class="fld"><span>Archivos .csv</span><input type="file" id="b-files" accept=".csv" multiple></label><button class="btn" id="b-go"'+(S.meta&&!S.readonly?'':' disabled')+'>Cargar BEES</button></div></div>'+
   '<div class="card"><h2>Cierre del mes</h2><p>Antes de cargar el mes siguiente, descargá el HTML de cierre: queda una copia con todo lo que se cargó, que se abre sin conexión y no se puede modificar.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="c-snap"'+(S.meta?'':' disabled')+'>Descargar HTML de cierre</button><button class="btn sec" id="c-csv"'+(S.meta?'':' disabled')+'>Exportar todas las respuestas (CSV)</button></div></div>'+
+  vendExclCard()+
   '<div class="grid2"><div class="card"><h2>Motivos y planes de acción</h2><p class="muted small">Uno por línea. Lo ya cargado con otro texto se conserva.</p><div class="fld"><span>Motivos</span><textarea class="t" id="l-mot">'+esc(S.cfg.motivos.join('\n'))+'</textarea></div><div class="fld"><span>Planes de acción</span><textarea class="t" id="l-pla" style="min-height:90px">'+esc(S.cfg.planes.join('\n'))+'</textarea></div><button class="btn" id="l-save">Guardar listas</button></div>'+
   '<div class="card"><h2>Mapeo de negocios</h2><p class="muted small">Negocio de la base de ventas → negocio Galaxia. Si lo cambiás, volvé a procesar y publicar el mes para que se aplique.</p><table class="mini"><thead><tr><th>Base de ventas</th><th>Galaxia</th></tr></thead><tbody>'+Object.entries(S.cfg.mapeo).map(([k,v])=>'<tr><td>'+esc(k)+'</td><td><input data-mk="'+esc(k)+'" value="'+esc(v)+'" style="width:130px;text-align:left"></td></tr>').join('')+'</tbody></table><button class="btn" id="m-save" style="margin-top:10px">Guardar mapeo</button></div></div>'+
   '<div class="grid2"><div class="card"><h2>Supervisores y vendedores</h2><p class="muted small">JSON: supervisor → códigos de vendedor (el número Vnd. de Chess). Los códigos que no figuran van a "SIN SUPERVISOR".</p><textarea class="t" id="s-json" style="min-height:200px">'+esc(JSON.stringify(S.cfg.supervisores,null,1))+'</textarea><button class="btn" id="s-save" style="margin-top:10px">Guardar supervisores</button></div>'+
   '<div class="card"><h2>Cómo preparar la venta resumida</h2><p>El export completo de VENTA es demasiado grande para el navegador. Convertilo antes en una tabla de 4 columnas: <b>Cliente, Negocio, Periodo, Cantidad</b> (una fila por cliente, negocio y mes). Dos formas:</p><ul class="clean"><li>Con el script de Python: descargalo, y corrés <code>python preparar_venta.py VENTA.xlsx</code>.</li><li>Con Power Query o una tabla dinámica en Excel, agrupando el export por Cod. Cliente, Unidad de Negocio (descripción), Período y sumando Cantidades Totales.</li></ul><button class="btn sec" id="py-dl">Descargar preparar_venta.py</button><h3 style="margin-top:16px">PIN de admin</h3><div style="display:flex;gap:10px;align-items:flex-end"><label class="fld"><span>PIN nuevo</span><input type="password" id="pin-new"></label><button class="btn sec" id="pin-save">Cambiar PIN</button></div></div></div>';
   adminBind();
+}
+function vendExclCard(){
+  if(!S.clientesAll.length) return '';
+  const m=new Map(); for(const c of S.clientesAll){ const k=String(c.vc); const o=m.get(k)||{vc:k,vd:c.vd||'(sin vendedor)',n:0}; o.n++; m.set(k,o); }
+  const ex=new Set((S.cfg.excluidos||[]).map(String));
+  const l=[...m.values()].sort((a,b)=>a.vd.localeCompare(b.vd));
+  const nEx=S.clientesAll.length-S.clientes.length;
+  return '<div class="card"><h2>Vendedores a excluir</h2><p class="muted">Tildá los vendedores que no querés seguir (por ejemplo SUPERMERCADOS o MOSTRADOR). Sus clientes desaparecen de OBLIGATORIO, GENERAL y RESUMEN, y no cuentan en los porcentajes. Se puede deshacer cuando quieras y no hace falta volver a cargar el mes.'+(nEx?' Ahora hay <b>'+fmtN(nEx)+'</b> clientes excluidos.':'')+'</p><div class="xv-list">'+l.map(o=>'<label class="chk xv"><input type="checkbox" data-xv="'+esc(o.vc)+'"'+(ex.has(o.vc)?' checked':'')+'> <span>'+esc(o.vd)+' <span class="muted small">('+esc(o.vc)+') · '+fmtN(o.n)+' clientes</span></span></label>').join('')+'</div><button class="btn" id="x-save" style="margin-top:10px">Guardar exclusiones</button></div>';
 }
 function adminBind(){
   const ps=$('#a-prevsel'); ps.onchange=()=>$('#a-prevbox').classList.toggle('hide',ps.value!=='xlsx');
@@ -927,6 +947,7 @@ function adminBind(){
   $('#b-go').onclick=()=>adminBees().catch(e=>toast(e.message,true));
   $('#c-snap').onclick=adminSnapshot; $('#c-csv').onclick=()=>exportRows(S.rows,'respuestas_completo');
   $('#py-dl').onclick=()=>download('preparar_venta.py',PREPARAR_PY,'text/x-python');
+  const xs=$('#x-save'); if(xs) xs.onclick=async()=>{ const l=$$('[data-xv]').filter(i=>i.checked).map(i=>i.dataset.xv); await S.db.set('cnc/config/excluidos',JSON.stringify(l)); await loadConfig(); buildRows(); toast(l.length?l.length+' vendedores excluidos. Ya no aparecen en ninguna pestaña.':'No hay vendedores excluidos'); viewAdmin(); };
   $('#l-save').onclick=async()=>{ await S.db.set('cnc/config/lists',{motivos:$('#l-mot').value.split('\n').map(x=>x.trim()).filter(Boolean).join('\n'),planes:$('#l-pla').value.split('\n').map(x=>x.trim()).filter(Boolean).join('\n')}); await loadConfig(); toast('Listas guardadas'); };
   $('#m-save').onclick=async()=>{ const m={}; $$('[data-mk]').forEach(i=>{ if(i.value.trim()) m[i.dataset.mk]=i.value.trim(); }); await S.db.set('cnc/config/mapeo',m); await loadConfig(); toast('Mapeo guardado. Volvé a procesar y publicar el mes para aplicarlo.'); };
   $('#s-save').onclick=async()=>{ try{ const j=JSON.parse($('#s-json').value); await S.db.set('cnc/config/supervisores',JSON.stringify(j)); await loadConfig(); if(S.meta) buildRows(); toast('Supervisores guardados'); }catch(e){ toast('El JSON no es válido: '+e.message,true); } };
@@ -961,7 +982,7 @@ async function adminPublish(){
   if(Object.keys(p.bees.bees).length||Object.keys(p.bees.beesGen).length||Object.keys(p.bees.beesFoto).length){ await S.db.set(b+'/bees',p.bees.bees); await S.db.set(b+'/beesGen',p.bees.beesGen); await S.db.set(b+'/beesFoto',p.bees.beesFoto); alog('BEES Force publicado.'); }
   if(p.prev==='app' && !same){ const pr=await S.db.get('cnc/meses/'+S.cfgRaw.mesActivo+'/resp'); const a=antFromResp(pr); await S.db.set(b+'/ant',a); alog(fmtN(Object.keys(a).length)+' respuestas del mes anterior traídas.'); }
   else if(p.prev==='xlsx'){ await S.db.set(b+'/ant',p.ant); if(p.histPrev&&p.prevCorte&&p.prevCorte!==mes) await S.db.set('cnc/hist/'+p.prevCorte,p.histPrev); alog('Respuestas del Excel anterior publicadas.'); }
-  await S.db.set('cnc/hist/'+mes,histFromDataset(ds.clientes,ds.meta.negocios));
+  { const ex=new Set((S.cfg.excluidos||[]).map(String)); await S.db.set('cnc/hist/'+mes,histFromDataset(ds.clientes.filter(c=>!ex.has(String(c.vc))),ds.meta.negocios)); }
   await S.db.update('cnc/config',{mesActivo:mes}); await S.db.set('cnc/config/meses/'+mes,true);
   await loadConfig(); await loadMonth(mes); S.pending=null; alog('Listo. Mes activo: '+ymLong(mes)+'.'); toast('Mes publicado'); shell(); S.tab='ad'; $$('.tab').forEach(x=>x.classList.toggle('on',x.dataset.t==='ad')); renderView();
 }
@@ -973,7 +994,7 @@ async function adminBees(){
   S.bees=acc.bees; S.beesGen=acc.beesGen; S.beesFoto=acc.beesFoto; toast('BEES cargado · '+msgs.join(' · ')); 
 }
 async function adminSnapshot(){
-  const cfg=S.cfgRaw; const conf={mesActivo:S.mes,meses:{[S.mes]:true}}; ['lists','mapeo','supervisores'].forEach(k=>{ if(cfg[k]!==undefined) conf[k]=cfg[k]; });
+  const cfg=S.cfgRaw; const conf={mesActivo:S.mes,meses:{[S.mes]:true}}; ['lists','mapeo','supervisores','excluidos'].forEach(k=>{ if(cfg[k]!==undefined) conf[k]=cfg[k]; });
   const mesNode={meta:S.meta,base:S.baseRaw}; if(Object.keys(S.resp).length) mesNode.resp=S.resp; if(Object.keys(S.ant).length) mesNode.ant=S.ant; if(Object.keys(S.bees).length) mesNode.bees=S.bees; if(Object.keys(S.beesGen).length) mesNode.beesGen=S.beesGen; if(Object.keys(S.beesFoto).length) mesNode.beesFoto=S.beesFoto;
   const tree={cnc:{config:conf,hist:S.hist,meses:{[S.mes]:mesNode}}};
   const json=JSON.stringify(tree).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
