@@ -38,7 +38,6 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
 .pill b{font-weight:700}
 .top button.lnk{background:none;border:0;color:#d5d8de;cursor:pointer;text-decoration:underline;padding:2px 4px}
 .tabsbar{max-width:1500px;margin:0 auto;padding:0 18px 10px;display:flex;align-items:center;gap:12px}
-.tabsbar .logo{height:30px;opacity:.95}
 .tabs{display:flex;gap:4px;overflow-x:auto;background:rgba(0,0,0,.25);padding:4px;border-radius:12px}
 .tab{background:transparent;border:0;color:#d5d8de;padding:6px 16px;cursor:pointer;border-radius:6px;font-weight:700;font-size:13.5px;white-space:nowrap;transition:background .2s}
 .tab:hover{background:#3a3f48;color:#fff}
@@ -595,7 +594,7 @@ function shell(){
    '<div class="top"><div class="top-in"><div class="brandbox"><img class="logo" src="'+LOGO_SRC+'" alt="Logística Total"><div><span class="brand">SEGUIMIENTO DE CLIENTES NO COMPRADORES</span><span class="brandsub">Logística Total SRL · Manual Galaxia 2.1.2.5</span></div></div>'+
    (S.meta?'<span class="pill">Corte <b>'+esc(ymLong(S.meta.corte))+'</b></span>':'')+mesSel+'<span class="sp"></span>'+
    '<span class="pill">'+esc(u.admin?'ADMIN':u.all?'Cierre':supLabel(u.name))+'</span><button class="lnk" id="chg">Cambiar</button></div>'+
-   '<div class="tabsbar"><img class="logo" src="'+LOGO_SRC+'" alt=""><div class="tabs">'+tabs.map(t=>'<button class="tab'+(S.tab===t[0]?' on':'')+'" data-t="'+t[0]+'">'+t[1]+'</button>').join('')+'</div></div></div><main id="view"></main>';
+   '<div class="tabsbar"><div class="tabs">'+tabs.map(t=>'<button class="tab'+(S.tab===t[0]?' on':'')+'" data-t="'+t[0]+'">'+t[1]+'</button>').join('')+'</div></div></div><main id="view"></main>';
   $$('.tab').forEach(b=>b.onclick=()=>go(b.dataset.t));
   $('#chg').onclick=async()=>{ localStorage.removeItem('cnc_user'); sessionStorage.removeItem('cnc_admin'); S.user=null; await startApp(); };
   const ms=$('#mesSel'); if(ms) ms.onchange=async()=>{ await loadMonth(ms.value); shell(); renderView(); };
@@ -948,12 +947,23 @@ function viewAdmin(){
   '<div style="margin-top:10px;display:flex;gap:10px"><button class="btn" id="a-proc">Procesar y revisar</button><button class="btn" id="a-pub" disabled>Publicar mes</button></div><div id="ad-prev"></div><div class="log hide" id="ad-log"></div></div>'+
   '<div class="card"><h2>Actualizar solo BEES Force</h2><p class="muted">Para sumar las respuestas de BEES del mes cuando llegan después. Reconoce solo los 3 tipos de archivo (U90 sin compra, U90 por negocio y U12M) y toma únicamente los clientes de tu distribuidor ('+DIST_CODE+').</p><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><label class="fld"><span>Archivos .csv</span><input type="file" id="b-files" accept=".csv" multiple></label><button class="btn" id="b-go"'+(S.meta&&!S.readonly?'':' disabled')+'>Cargar BEES</button></div></div>'+
   '<div class="card"><h2>Cierre del mes</h2><p>Antes de cargar el mes siguiente, descargá el HTML de cierre: queda una copia con todo lo que se cargó, que se abre sin conexión y no se puede modificar.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="c-snap"'+(S.meta?'':' disabled')+'>Descargar HTML de cierre</button><button class="btn sec" id="c-csv"'+(S.meta?'':' disabled')+'>Exportar todas las respuestas (CSV)</button></div></div>'+
+  demoRecoverCard()+
   vendExclCard()+
   '<div class="grid2"><div class="card"><h2>Motivos y planes de acción</h2><p class="muted small">Uno por línea. Lo ya cargado con otro texto se conserva.</p><div class="fld"><span>Motivos</span><textarea class="t" id="l-mot">'+esc(S.cfg.motivos.join('\n'))+'</textarea></div><div class="fld"><span>Planes de acción</span><textarea class="t" id="l-pla" style="min-height:90px">'+esc(S.cfg.planes.join('\n'))+'</textarea></div><button class="btn" id="l-save">Guardar listas</button></div>'+
   '<div class="card"><h2>Mapeo de negocios</h2><p class="muted small">Negocio de la base de ventas → negocio Galaxia. Si lo cambiás, volvé a procesar y publicar el mes para que se aplique.</p><table class="mini"><thead><tr><th>Base de ventas</th><th>Galaxia</th></tr></thead><tbody>'+Object.entries(S.cfg.mapeo).map(([k,v])=>'<tr><td>'+esc(k)+'</td><td><input data-mk="'+esc(k)+'" value="'+esc(v)+'" style="width:130px;text-align:left"></td></tr>').join('')+'</tbody></table><button class="btn" id="m-save" style="margin-top:10px">Guardar mapeo</button></div></div>'+
   '<div class="grid2"><div class="card"><h2>Supervisores y vendedores</h2><p class="muted small">JSON: supervisor → códigos de vendedor (el número Vnd. de Chess). Los códigos que no figuran van a "SIN SUPERVISOR".</p><textarea class="t" id="s-json" style="min-height:200px">'+esc(JSON.stringify(S.cfg.supervisores,null,1))+'</textarea><button class="btn" id="s-save" style="margin-top:10px">Guardar supervisores</button></div>'+
   '<div class="card"><h2>Cómo preparar la venta resumida</h2><p>El export completo de VENTA es demasiado grande para el navegador. Convertilo antes en una tabla de 4 columnas: <b>Cliente, Negocio, Periodo, Cantidad</b> (una fila por cliente, negocio y mes). Dos formas:</p><ul class="clean"><li>Con el script de Python: descargalo, y corrés <code>python preparar_venta.py VENTA.xlsx</code>.</li><li>Con Power Query o una tabla dinámica en Excel, agrupando el export por Cod. Cliente, Unidad de Negocio (descripción), Período y sumando Cantidades Totales.</li></ul><button class="btn sec" id="py-dl">Descargar preparar_venta.py</button><h3 style="margin-top:16px">PIN de admin</h3><div style="display:flex;gap:10px;align-items:flex-end"><label class="fld"><span>PIN nuevo</span><input type="password" id="pin-new"></label><button class="btn sec" id="pin-save">Cambiar PIN</button></div></div></div>';
   adminBind();
+}
+function demoResp(mes){
+  try{ const t=JSON.parse(localStorage.getItem('cnc_demo_db')||'null'); const r=t&&t.cnc&&t.cnc.meses&&t.cnc.meses[mes]&&t.cnc.meses[mes].resp; return r&&typeof r==='object'?r:{}; }catch(e){ return {}; }
+}
+function demoRecoverCard(){
+  if(S.mode!=='live'||!S.meta) return '';
+  const r=demoResp(S.mes), n=Object.keys(r).length;
+  if(!n) return '';
+  const nuevas=Object.keys(r).filter(k=>!S.resp[k]).length;
+  return '<div class="card"><h2>Respuestas guardadas en modo demo</h2><p>Este navegador tiene <b>'+fmtN(n)+'</b> respuestas de '+esc(ymLong(S.mes))+' cargadas cuando la app todavía no estaba conectada a Firebase ('+fmtN(nuevas)+' todavía no están en la base). Podés traerlas a Firebase. No pisa lo que ya esté cargado.</p><button class="btn" id="demo-rec"'+(nuevas?'':' disabled')+'>Traer '+fmtN(nuevas)+' respuestas a Firebase</button></div>';
 }
 function vendExclCard(){
   if(!S.clientesAll.length) return '';
@@ -970,6 +980,7 @@ function adminBind(){
   $('#b-go').onclick=()=>adminBees().catch(e=>toast(e.message,true));
   $('#c-snap').onclick=adminSnapshot; $('#c-csv').onclick=()=>exportRows(S.rows,'respuestas_completo');
   $('#py-dl').onclick=()=>download('preparar_venta.py',PREPARAR_PY,'text/x-python');
+  const dr=$('#demo-rec'); if(dr) dr.onclick=async()=>{ const r=demoResp(S.mes); const add={}; Object.keys(r).forEach(k=>{ if(!S.resp[k]) add[k]=r[k]; }); if(!Object.keys(add).length){ toast('No hay respuestas nuevas para traer'); return; } await S.db.update('cnc/meses/'+S.mes+'/resp',add); toast(Object.keys(add).length+' respuestas traídas'); viewAdmin(); };
   const xs=$('#x-save'); if(xs) xs.onclick=async()=>{ const l=$$('[data-xv]').filter(i=>i.checked).map(i=>i.dataset.xv); await S.db.set('cnc/config/excluidos',JSON.stringify(l)); await loadConfig(); buildRows(); toast(l.length?l.length+' vendedores excluidos. Ya no aparecen en ninguna pestaña.':'No hay vendedores excluidos'); viewAdmin(); };
   $('#l-save').onclick=async()=>{ await S.db.set('cnc/config/lists',{motivos:$('#l-mot').value.split('\n').map(x=>x.trim()).filter(Boolean).join('\n'),planes:$('#l-pla').value.split('\n').map(x=>x.trim()).filter(Boolean).join('\n')}); await loadConfig(); toast('Listas guardadas'); };
   $('#m-save').onclick=async()=>{ const m={}; $$('[data-mk]').forEach(i=>{ if(i.value.trim()) m[i.dataset.mk]=i.value.trim(); }); await S.db.set('cnc/config/mapeo',m); await loadConfig(); toast('Mapeo guardado. Volvé a procesar y publicar el mes para aplicarlo.'); };
